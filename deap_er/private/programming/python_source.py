@@ -10,10 +10,12 @@
 #
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import numpy
 
+from .column_strides import stride_plan
 from .columnar import Window
 from .primitives.primitive_set_typed import PrimitiveSetTyped
 from .primitives.program_check import check_node
@@ -47,7 +49,9 @@ def as_series(value: Any, reference: Any) -> Any:
     return numpy.full(numpy.shape(reference)[0], value, dtype=numpy.float64)
 
 
-def python_source(expr: Any, reference: str | None) -> tuple[str, bool]:
+def python_source(
+    expr: Any, reference: str | None, scales: Mapping[int, int] | None = None
+) -> tuple[str, bool]:
     """Render ``expr`` as Python source for the ``'python'`` backend.
 
     With a ``reference`` column name, each series operand of a window
@@ -58,13 +62,15 @@ def python_source(expr: Any, reference: str | None) -> tuple[str, bool]:
         expr: Source text, or a prefix-ordered tree.
         reference: Argument name that supplies the row count, or
             ``None`` to render the plain expression.
+        scales: Rows per window step by node index, as
+            ``window_scales`` returns. Omitted means one row per step.
 
     Returns:
         The source text, and whether it calls :data:`SERIES_HELPER`.
     """
     if isinstance(expr, str) or reference is None:
         return str(expr), False
-    text, wrapped, _ = _render(expr, reference, None)
+    text, wrapped, _ = _render(expr, reference, None, scales or {})
     return text, wrapped
 
 
@@ -85,13 +91,16 @@ def compile_python(expr: Any, prim_set: PrimitiveSetTyped) -> Any:
 
     Raises:
         MemoryError: If evaluation exceeds the recursion limit.
+        ProgramError: If a window scaled by the set's column strides
+            holds more rows than ``WINDOW_MAX``.
     """
     reference = prim_set.arguments[0] if prim_set.arguments else None
-    if not isinstance(expr, str) and _render(expr, reference, None)[2] > FLAT_DEPTH:
+    expr, scales = stride_plan(expr, prim_set)
+    if not isinstance(expr, str) and _render(expr, reference, None, scales)[2] > FLAT_DEPTH:
         statements: list[str] = []
-        result, wrapped, _ = _render(expr, reference, statements)
+        result, wrapped, _ = _render(expr, reference, statements, scales)
         return _compile_flat(statements, result, wrapped, prim_set)
-    code, wrapped = python_source(expr, reference)
+    code, wrapped = python_source(expr, reference, scales)
     if reference is not None:
         code = f"lambda {','.join(prim_set.arguments)}: {code}"
     if wrapped:
@@ -101,7 +110,10 @@ def compile_python(expr: Any, prim_set: PrimitiveSetTyped) -> Any:
 
 
 def _render(
-    expr: Any, reference: str | None, statements: list[str] | None
+    expr: Any,
+    reference: str | None,
+    statements: list[str] | None,
+    scales: Mapping[int, int],
 ) -> tuple[str, bool, int]:
     """Render a prefix-ordered tree as Python source.
 
@@ -112,6 +124,8 @@ def _render(
         statements: When given, each primitive call is appended to it
             as an assignment to a fresh local, and the local's name
             stands in for the call.
+        scales: Rows per window step by node index. A window operand
+            of a listed node is multiplied by its step.
 
     Returns:
         The source text, whether it calls :data:`SERIES_HELPER`, and
@@ -123,14 +137,15 @@ def _render(
     wrapped = False
     text = ""
     depth = 0
-    stack: list[tuple[Any, list[str]]] = []
+    stack: list[tuple[Any, list[str], int]] = []
     for index, node in enumerate(expr):
         check_node(node, index)
-        stack.append((node, []))
+        stack.append((node, [], index))
         depth = max(depth, len(stack))
         while len(stack[-1][1]) == stack[-1][0].arity:
-            prim, args = stack.pop()
+            prim, args, position = stack.pop()
             types = getattr(prim, "args", [])
+            args = _scale_windows(args, types, scales.get(position, 1))
             if reference is not None and Window in types:
                 wrapped = True
                 args = _wrap_series(args, types, reference)
@@ -143,6 +158,25 @@ def _render(
                 break
             stack[-1][1].append(text)
     return text, wrapped, depth
+
+
+def _scale_windows(args: list[str], types: list[Any], step: int) -> list[str]:
+    """Multiply each ``Window`` operand of a primitive by ``step`` rows.
+
+    Args:
+        args: Rendered operands of the primitive.
+        types: Argument types of the primitive.
+        step: Rows per window step.
+
+    Returns:
+        The operands, unchanged when ``step`` is 1.
+    """
+    if step == 1:
+        return args
+    return [
+        f"{arg} * {step}" if type_ is Window else arg
+        for arg, type_ in zip(args, types, strict=True)
+    ]
 
 
 def _wrap_series(args: list[str], types: list[Any], reference: str) -> list[str]:

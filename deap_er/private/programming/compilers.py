@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from deap_er.private.various.eval_cache import clear_eval_caches, invalidate_eval
 
+from .column_strides import argument_strides
 from .compile_cache import CompileCache, compile_cache_key, expression_key
 from .matrix_pack import as_matrix, is_packed_matrix
 from .numba.numba_ops import bind_tape
@@ -136,8 +137,8 @@ def compile_tree(
 
     Compiled results are cached, keyed by a structural tree key or
     the source text, the argument names, the contents of the primitive
-    set, the backend, the dispatcher, and the promoted-library
-    generation. ``clear_compile_cache`` drops the table;
+    set, its column strides, the backend, the dispatcher, and the
+    promoted-library generation. ``clear_compile_cache`` drops the table;
     ``promote_subtree`` does that on every mutation.
 
     Args:
@@ -157,7 +158,8 @@ def compile_tree(
         NameError: If ``expr`` holds a primitive missing from
             ``prim_set.context``.
         ProgramError: If ``expr`` is empty, if a leaf does not fit its
-            argument slot, or if a window length is not an integer in
+            argument slot, or if a window length, or its row count
+            under the set's column strides, is not an integer in
             ``[1, WINDOW_MAX]`` (see ``check_program``). It subclasses
             ``ValueError``.
         ValueError: If the backend is unknown, or if a tape backend
@@ -166,7 +168,13 @@ def compile_tree(
     library = getattr(prim_set, "promoted_library", None)
     generation = 0 if library is None else library.generation
     cache_key = compile_cache_key(
-        backend, dispatch, expr, prim_set.arguments, prim_set.context, generation
+        backend,
+        dispatch,
+        expr,
+        prim_set.arguments,
+        prim_set.context,
+        generation,
+        argument_strides(prim_set),
     )
     cached = shared_compile_cache.get(cache_key)
     if cached is not None:

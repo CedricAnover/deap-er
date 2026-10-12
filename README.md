@@ -46,7 +46,8 @@ uv add deap-er
   and differential-evolution variation
 - Genetic programming: prefix trees (loosely typed, strongly typed,
   ADFs), SlimGP, columnar programs over named `float64` columns
-  with vectorized, causal-window, tape / Numba backends (population
+  with vectorized, causal-window (per-column strides for held,
+  slower-cadence columns), tape / Numba backends (population
   tape CSE), homologous and semantic crossover, interval
   certificates that skip dead tapes, and a
   private [Push GP](https://aabmets.github.io/deap-er/tutorials/push_gp/)
@@ -99,7 +100,7 @@ inventory:
   [creator](https://aabmets.github.io/deap-er/bugfixes/creator/),
   [utilities](https://aabmets.github.io/deap-er/bugfixes/utilities/),
   and [algorithms](https://aabmets.github.io/deap-er/bugfixes/algorithms/)
-- **67** capabilities DEAP does not have, including boxed CMA,
+- **68** capabilities DEAP does not have, including boxed CMA,
   mixed-gene mutation, logbook JSON,
   [columnar GP](https://aabmets.github.io/deap-er/tutorials/columnar_gp/),
   and [Push GP](https://aabmets.github.io/deap-er/tutorials/push_gp/)
