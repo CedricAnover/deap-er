@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.10] - 2026-10-13
+
 ### Added
 
 - `interpret_tapes`, `evaluate_columnar`, `suffix_rescore`,
@@ -880,7 +882,8 @@ commits that landed on that tag.
 - Hypervolume and least-contributed indicator
 - CMA strategy keyword arguments
 
-[Unreleased]: https://github.com/aabmets/deap-er/compare/3.2.9...HEAD
+[Unreleased]: https://github.com/aabmets/deap-er/compare/3.2.10...HEAD
+[3.2.10]: https://github.com/aabmets/deap-er/compare/3.2.9...3.2.10
 [3.2.9]: https://github.com/aabmets/deap-er/compare/3.1.9...3.2.9
 [3.1.9]: https://github.com/aabmets/deap-er/compare/3.1.8...3.1.9
 [3.1.8]: https://github.com/aabmets/deap-er/compare/3.1.7...3.1.8
